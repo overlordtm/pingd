@@ -47,7 +47,31 @@ function reload() {
 }
 
 function help() {
-	echo Izpisem pomoc
+	cat << LOL
+Usage:
+	$0 (start | stop | reload | restart )
+
+	start:
+		Starts a daemon
+	stop:
+		Stops daemon
+	reload:
+		Force reload of onfiguration files
+	restart:
+		stop(); start()
+
+Files:
+	$SCRIPTNAME.sh: Daemon script
+	$SCRIPTNAME.conf: Configuration files, each line is one host. First field is hostname, then TAB then pause between probes
+	$SCRIPTNAME.count: Number of successful probes
+	$SCRIPTNAME.log: Log file
+	$SCRIPTNAME.pid: Pid of daemon. Hands off!
+	$SCRIPTNAME.lock: Semaphore. Hands off!
+
+Description:
+	$SCRIPTNAME is daemon, which periodicaly checks for hosts, if they respond to ping request and log it to log file.
+
+LOL
 }
 
 function test() {
