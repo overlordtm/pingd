@@ -1,6 +1,5 @@
-#!/bin/bash +m
+#!/bin/bash
 
-LOG=pingd.log
 SCRIPTNAME=$(basename $0 .sh)
 ALIVE=1
 declare -a WORKERS
@@ -24,12 +23,13 @@ function stop() {
 	if [[ -f $SCRIPTNAME.pid ]]; then
 		PID=$(cat $SCRIPTNAME.pid)
 		kill -SIGUSR1 $PID
-		rm -f $SCRIPTNAME.pid
+		#rm -f $SCRIPTNAME.pid
 		echo Demon ustavljen
 	else
 		echo Demon ne tece!
 	fi
 }
+
 
 function restart() {
 	stop
@@ -57,26 +57,31 @@ function test() {
 	echo -e "www.google.com\t3\nwww.fri.uni-lj.si\t6" > $SCRIPTNAME.conf
 	
 	echo Zaganjam demona!
-	start & 
+	$0 start 
 
-	echo Spim za 10s
-	sleep 10
+	PID=$(cat $SCRIPTNAME.pid)
+
+	echo Spim za 15s
+	sleep 15
 
 	echo Dodajam IJS
 	echo -e "www.ijs.si\t4" >> $SCRIPTNAME.conf
 
-	reload &
+	$0 reload
 	
-	echo Spim za 10s
-	sleep 10
+	echo Spim za 15s
+	sleep 15
 
 	echo Ustavljam demona
-	stop &
+	$0 stop
 
-	wait
+	while [[ -e $SCRIPTNAME.pid || -e $SCRIPTNAME.lock ]]; do
+		sleep 1
+	done
 
-	#cat $SCRIPTNAME.log
-	#echo USpesnih dostopov je bilo $(cat $SCRIPTNAME.count)
+	echo "###########################################"
+	cat $SCRIPTNAME.log
+	echo Uspesnih dostopov je bilo $(cat $SCRIPTNAME.count)
 
 }
 
@@ -97,9 +102,9 @@ function hostWorker() {
 	HOST=$1
 	DELAY=$2
 
-	trap "echo $HOST dobil sem signal; OK=0" SIGHUP
+	trap "OK=0" SIGHUP
 
-	echo Preverjalnik $HOST deluje!
+	logEvent "pinger $HOST started!"
 
 	while [[ -e $SCRIPTNAME.pid && $OK == 1 ]]; do
 
@@ -118,7 +123,7 @@ function hostWorker() {
 		wait $SLEEPPID
 	done;
 
-	echo Preverjevelnik $HOST zakljucen!
+	logEvent "pinger $HOST stopped!"
 }
 
 function pingd() {
@@ -131,33 +136,31 @@ function pingd() {
 
 	logEvent "$SCRIPTNAME started!"
 
-	while [[ $ALIVE -eq 1 ]]; do
+	while [[ -e $SCRIPTNAME.pid && $ALIVE -eq 1 ]]; do
 		sleep 1
 	done
+
+	logEvent "$SCRIPTNAME stopped"
+	rm -f $SCRIPTNAME.pid
+	exit 0
 }
 
 function pingd_reload() {
-	logEvent "$SCRIPTNAME reloaded"
 	workers_stop
 	workers_start
+	logEvent "$SCRIPTNAME reloaded"
 }
 
 function pingd_stop() {
-	logEvent "$SCRIPTNAME stopped"
 	workers_stop
 	ALIVE=0
-	wait
 }
 
 function workers_start() {
 	i=1
 	while read HOST DELAY; do
-		#HOST=$(echo $LINE | awk '{print $1}')
-		#DELAY=$(echo $LINE | awk '{print $2}')
-		
 		hostWorker $HOST $DELAY &
 		WORKERS[$i]=$!
-
 		let i++
 	done < $SCRIPTNAME.conf
 }
@@ -166,15 +169,17 @@ function workers_stop() {
 
 	WORKERSCOUNT=${#WORKERS[@]}
 
-	exec 10>&2 2>/dev/null #shranimo stderr v &10
+	#exec 10>&2 2>/dev/null #shranimo stderr v &10
 
 	for ((i=1; i<=$WORKERSCOUNT; i++)); do
 		# ubijemo delavce
-		kill -SIGHUP ${WORKERS[$i]}
-		wait ${WORKERS[$i]}
+		if [[ `kill -0 ${WORKERS[$i]}` -eq 0 ]]; then
+			kill -SIGHUP ${WORKERS[$i]}
+			wait ${WORKERS[$i]}
+		fi
 	done
 
-	exec 2>&10- # restoramo stderr
+	#exec 2>&10- # restoramo stderr
 
 	unset WORKERS
 	declare -a WORKERS
